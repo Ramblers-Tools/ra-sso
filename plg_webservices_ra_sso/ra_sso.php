@@ -81,8 +81,8 @@ class PlgWebservicesRa_sso extends CMSPlugin
         
         if(isset($queryParams['error']) && isset($queryParams['error_description']))
         {
-            $msg = "<strong>Error: </strong> " . $queryParams['error'] . "<br>" .
-               "<strong>Description: </strong> " . $queryParams['error_description'];
+            $msg = "<strong>Error: </strong> " . htmlspecialchars((string) $queryParams['error'], ENT_QUOTES, 'UTF-8') . "<br>" .
+               "<strong>Description: </strong> " . htmlspecialchars((string) $queryParams['error_description'], ENT_QUOTES, 'UTF-8');
             echo $msg; 
             exit();
         }
@@ -95,7 +95,7 @@ class PlgWebservicesRa_sso extends CMSPlugin
         else if (isset($queryParams['morequest']) and $queryParams['morequest'] == 'oauthredirect') {
             $raSsoClientHandler->handleOAuthRequest($queryParams);
         }
-        else if (isset($queryParams['code'])) {
+        else if (isset($queryParams['code']) && isset($queryParams['state'])) {
             $raSsoClientHandler->handleOAuthRequest($queryParams);
         }
     }

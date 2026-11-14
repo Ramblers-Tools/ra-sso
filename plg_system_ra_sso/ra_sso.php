@@ -225,13 +225,20 @@ class PlgSystemRa_sso extends CMSPlugin
                     $response->email = $user->email;
                     $response->fullname = $user->name;
 
-                    $app->triggerEvent(
+                    $results = $app->triggerEvent(
                         'onUserLogin',
                         array(
                             (array) $response,
                             array('remember' => false)
                         )
                     );
+
+                    // A user plugin can refuse the login (e.g. no site login permission).
+                    if (in_array(false, (array) $results, true)) {
+                        RaSsoLogger::addLog('SSO login refused by a user plugin', 'WARNING');
+                        $app->redirect(Uri::root() . 'index.php');
+                        exit;
+                    }
 
                     $session->set('user', $user);
 
@@ -542,7 +549,8 @@ class PlgSystemRa_sso extends CMSPlugin
         else if(isset($get['morequest']) and $get['morequest'] == 'oauthredirect') {
             $raSsoClientHandler->handleOAuthRequest($get);
         }
-        else if(isset($get['code'])) {
+        else if(isset($get['code']) && isset($get['state'])) {
+            // An OAuth reply always has a state; other extensions' "code" parameters don't.
             $raSsoClientHandler->handleOAuthRequest($get);
         }
     }  

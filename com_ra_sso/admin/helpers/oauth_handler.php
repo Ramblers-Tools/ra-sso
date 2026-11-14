@@ -34,12 +34,13 @@ class RaSsoHandler
 
         $session = Factory::getSession();
         $ch = curl_init($tokenendpoint);
-        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+        // The token request carries the client secret: never follow a redirect with it, and
+        // always check the provider's certificate (the answer decides who is logged in).
+        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, false);
         curl_setopt($ch, CURLOPT_ENCODING, "");
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_AUTOREFERER, true);
-        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-        curl_setopt($ch, CURLOPT_MAXREDIRS, 10);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 2);
         curl_setopt($ch, CURLOPT_POST, true);
         
         if($in_header_or_body=='both') {
@@ -49,7 +50,7 @@ class RaSsoHandler
                 'Authorization: Basic ' . base64_encode($clientid . ":" . $clientsecret)
                 )
             );
-            curl_setopt($ch, CURLOPT_POSTFIELDS, 'redirect_uri='.urlencode($redirect_url).'&grant_type='.$grant_type.'&client_id='.urlencode($clientid).'&client_secret='.urlencode($clientsecret).'&code='.$code);
+            curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query(array('redirect_uri' => $redirect_url, 'grant_type' => $grant_type, 'client_id' => $clientid, 'client_secret' => $clientsecret, 'code' => (string) $code), '', '&'));
 
         }
         elseif($in_header_or_body=='inHeader') {
@@ -59,7 +60,7 @@ class RaSsoHandler
                 'Authorization: Basic ' . base64_encode($clientid . ":" . $clientsecret)
                 )
             );
-            curl_setopt($ch, CURLOPT_POSTFIELDS, 'redirect_uri='.urlencode($redirect_url).'&grant_type='.$grant_type.'&code='.$code);
+            curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query(array('redirect_uri' => $redirect_url, 'grant_type' => $grant_type, 'code' => (string) $code), '', '&'));
         }
         else{
             curl_setopt(
@@ -67,7 +68,7 @@ class RaSsoHandler
                 'Accept: application/json'
                 )
             );
-                  curl_setopt($ch, CURLOPT_POSTFIELDS, 'redirect_uri='.urlencode($redirect_url).'&grant_type='.$grant_type.'&client_id='.$clientid.'&client_secret='.$clientsecret.'&code='.$code);
+            curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query(array('redirect_uri' => $redirect_url, 'grant_type' => $grant_type, 'client_id' => $clientid, 'client_secret' => $clientsecret, 'code' => (string) $code), '', '&'));
         }
         
         $content = curl_exec($ch);
@@ -108,37 +109,69 @@ class RaSsoHandler
         return array($access_token,$idToken);
     }
     
-    function getResourceOwnerFromIdToken($id_token)
+    /**
+     * The member's details from the ID token. The token came straight from the provider's token
+     * endpoint over a checked TLS connection, which OpenID Connect allows in place of checking its
+     * signature (Core 3.1.3.7); it must still be for this site (aud) and not have expired (exp).
+     */
+    function getResourceOwnerFromIdToken($id_token, $clientId = null)
     {
         $session = Factory::getSession();
-        $id_array = explode(".", $id_token);
-        if(isset($id_array[1])) {
-            $id_body = $this->base64url_decode($id_array[1]);
-            if(is_array(json_decode($id_body, true))) {
-                return json_decode($id_body, true);
-            }
+        $claims = self::idTokenClaims($id_token, $clientId, time());
+        if (is_array($claims)) {
+            return $claims;
         }
-        RaSsoLogger::addLog('Error Invalid Response', 'ERROR');
-        $this->setError('[RASSO-009] : ' . Text::_('COM_RA_SSO_INVALID_ID_TOKEN') . $id_token);
-        $session->set('mo_reason', ' Invalid response received.<br><b>Id_token : </b>'.$id_token);
+        RaSsoLogger::addLog('Error Invalid ID token: ' . $claims, 'ERROR');
+        $this->setError('[RASSO-009] : ' . Text::_('COM_RA_SSO_INVALID_ID_TOKEN'));
+        $session->set('mo_reason', 'Invalid response received.');
         return false;
     }
 
-    function getResourceOwner($resourceownerdetailsurl, $access_token,$idToken)
+    /** The ID token's claims, or why it can't be used. Plain PHP, for tests. */
+    static function idTokenClaims($id_token, $clientId, int $now)
+    {
+        $parts = is_string($id_token) ? explode('.', $id_token) : array();
+        if (count($parts) !== 3) {
+            return 'not a JWT';
+        }
+        $body = base64_decode(strtr($parts[1], '-_', '+/') . str_repeat('=', (4 - strlen($parts[1]) % 4) % 4), true);
+        $claims = $body === false ? null : json_decode($body, true);
+        if (!is_array($claims)) {
+            return 'unreadable';
+        }
+        if ($clientId !== null && $clientId !== '') {
+            $aud = isset($claims['aud']) ? (array) $claims['aud'] : array();
+            if (!in_array((string) $clientId, array_map('strval', $aud), true)) {
+                return 'not for this client';
+            }
+        }
+        if (!isset($claims['exp']) || !is_numeric($claims['exp']) || (int) $claims['exp'] < $now - 300) {
+            return 'expired';
+        }
+        return $claims;
+    }
+
+    function getResourceOwner($resourceownerdetailsurl, $access_token,$idToken, $clientId = null)
     {
         $session = Factory::getSession();
         if(!RaSsoUtility::is_curl_installed()) {
             return json_encode(array("status"=>'CURL_ERROR','statusMessage'=>'<a href="http://php.net/manual/en/curl.installation.php">PHP cURL extension</a> is not installed or disabled.'));
         }
         if(!empty($idToken) && !is_null($idToken)) {
-            return $this->getResourceOwnerFromIdToken($idToken);
+            return $this->getResourceOwnerFromIdToken($idToken, $clientId);
         }
         $ch = curl_init($resourceownerdetailsurl);
         curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
         curl_setopt($ch, CURLOPT_ENCODING, "");
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_AUTOREFERER, true);
-        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        // The answer decides who is logged in: always check the provider's certificate, and
+        // only follow redirects to https.
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 2);
+        if (defined('CURLOPT_REDIR_PROTOCOLS')) {
+            curl_setopt($ch, CURLOPT_REDIR_PROTOCOLS, CURLPROTO_HTTPS);
+        }
         curl_setopt($ch, CURLOPT_MAXREDIRS, 10);
         curl_setopt($ch, CURLOPT_POST, false);
         curl_setopt(
@@ -206,10 +239,11 @@ class RaSsoHandler
             return;
         }
 
+        // Error text can come from the provider: never print it as HTML.
         if(is_array($this->error)) {
-            print_r($this->error);
+            echo htmlspecialchars(print_r($this->error, true), ENT_QUOTES, 'UTF-8');
         } else {
-            echo($this->error);
+            echo htmlspecialchars((string) $this->error, ENT_QUOTES, 'UTF-8');
         }
 
         echo Text::_('COM_RA_SSO_LOGS_SUGGESTION');

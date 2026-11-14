@@ -24,14 +24,17 @@ defined('_JEXEC') or die('Restricted access');
 
 class RaSsoHandoff
 {
+    // The __Host- prefix makes browsers refuse these cookies unless this site set them itself
+    // (Secure, path /, no Domain), so a neighbouring site on the same parent domain can't.
+
     /** Cookie with the signed hand-off from the callback to the site. */
-    const LOGIN_COOKIE = 'ra_sso_login';
+    const LOGIN_COOKIE = '__Host-ra_sso_login';
 
     /** Cookie with the state of the login this browser started. */
-    const STATE_COOKIE = 'ra_sso_state';
+    const STATE_COOKIE = '__Host-ra_sso_state';
 
     /** Cookie with the page to go back to after SSO. */
-    const RETURN_COOKIE = 'ra_sso_return';
+    const RETURN_COOKIE = '__Host-ra_sso_return';
 
     /**
      * Before 3.1.6 the return page was kept in "returnurl", set without a path, so it landed on
@@ -69,7 +72,8 @@ class RaSsoHandoff
     /** True when the provider sent back the state this browser was given. */
     public static function stateMatches($cookie, $returned): bool
     {
-        return is_string($cookie) && is_string($returned) && $cookie !== '' && strlen($cookie) <= 512
+        return is_string($cookie) && is_string($returned) && strlen($cookie) <= 512
+            && preg_match('/^[A-Za-z0-9_-]{32}\.[A-Za-z0-9_-]+$/', $cookie) === 1
             && self::appFromState($cookie) !== '' && hash_equals($cookie, $returned);
     }
 

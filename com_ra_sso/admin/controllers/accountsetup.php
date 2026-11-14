@@ -12,6 +12,7 @@ use Joomla\CMS\MVC\Controller\FormController;
 use Joomla\CMS\Factory;
 use Joomla\CMS\Uri\Uri;
 use Joomla\CMS\Language\Text;
+use Joomla\CMS\Session\Session;
 
 class RaSsoControllerAccountSetup extends FormController
 {
@@ -19,6 +20,20 @@ class RaSsoControllerAccountSetup extends FormController
     {
         $this->view_list = 'accountsetup';
         parent::__construct();
+    }
+
+    /**
+     * Every task here changes the SSO set-up or hands out its settings, so each one needs the
+     * form token from this site's own pages. Without it, another website an administrator
+     * visited could change the set-up in their name.
+     */
+    public function execute($task)
+    {
+        if (!Session::checkToken('post') && !Session::checkToken('get')) {
+            $this->setRedirect('index.php?option=com_ra_sso&view=accountsetup', Text::_('JINVALID_TOKEN_NOTICE'), 'error');
+            return false;
+        }
+        return parent::execute($task);
     }
     
     function saveAdminMail()

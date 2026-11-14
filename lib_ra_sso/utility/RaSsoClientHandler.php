@@ -179,6 +179,7 @@ class RaSsoClientHandler
                     RaSsoLogger::addLog('SSO reply did not match a login started in this browser', 'WARNING');
                     $app->enqueueMessage('Single Sign On didn\'t complete. Please try again.', 'warning');
                     $app->redirect(Uri::root() . 'index.php');
+                    exit;
                 }
 
                 // get the app name from session or from the state
@@ -245,9 +246,18 @@ class RaSsoClientHandler
                 if (substr($resourceownerdetailsurl, -1) == "=") {
                     $resourceownerdetailsurl .= $accessToken;
                 }
-                $resourceOwner = $mo_oauth_handler->getResourceOwner($resourceownerdetailsurl, $accessToken, $idToken);
+                $resourceOwner = $mo_oauth_handler->getResourceOwner($resourceownerdetailsurl, $accessToken, $idToken, $currentapp['client_id']);
                 $mo_oauth_handler->printError();
                 list($email,$name)=$this->getEmailAndName($resourceOwner, $email_attr, $name_attr);
+                // The account is found by email, and SSO can log in to the backend, so only take
+                // an email the provider hasn't said is unverified.
+                $verified = is_array($resourceOwner) && array_key_exists('email_verified', $resourceOwner) ? $resourceOwner['email_verified'] : true;
+                if (!is_string($email) || $email === '' || $verified === false || $verified === 'false' || $verified === 0 || $verified === '0') {
+                    RaSsoLogger::addLog('SSO refused: email missing or not verified by the provider', 'WARNING');
+                    $app->enqueueMessage('Single Sign On couldn\'t log you in: your email address isn\'t verified with your Ramblers account.', 'warning');
+                    $app->redirect(Uri::root() . 'index.php');
+                    exit;
+                }
                 $checkUser = $this->get_user_from_joomla($email);
                 //efficiency of the plugin
                 $sso_eff = self::miniOauthFetchDb('#__ra_sso_customer', array('id'=>'1'));
@@ -324,7 +334,7 @@ class RaSsoClientHandler
             }catch (Exception $e) 
             {
                 RaSsoLogger::addLog('Exception : ' . $e, 'CRITICAL', 'RASSO-A01');
-                exit("[RASSO-A01] : " . $e->getMessage());
+                exit("[RASSO-A01] : Single Sign On failed. The details are in the RA SSO logs.");
             }
         }
     }
@@ -363,7 +373,7 @@ class RaSsoClientHandler
             echo '<div style="font-family:Calibri;padding:0 3%;">';
             echo '<div style="color: #3c763d;background-color: #dff0d8; padding:2%;margin-bottom:20px;text-align:center; border:1px solid #AEDB9A; font-size:18pt;">TEST SUCCESSFUL</div>
                 <div style="display:block;text-align:center;margin-bottom:4%;"><img style="width:15%;"src="' . $siteUrl . 'green_check.png"></div><br>
-                <span style="font-size:14pt;"><b>Hello, '.$email.'</b>,<br/> </span><br/>
+                <span style="font-size:14pt;"><b>Hello, '.htmlspecialchars(is_scalar($email) ? (string) $email : '', ENT_QUOTES, 'UTF-8').'</b>,<br/> </span><br/>
                 <table style="border-collapse:collapse;border-spacing:0; table-layout:fixed; display:table;width:100%; font-size:14pt;background-color:#EDEDED;">
                 <tr style="text-align:center;"><td style="font-weight:bold;border:2px solid #949090;padding:2%;">ATTRIBUTE NAME</td><td style="font-weight:bold;padding:2%;border:2px solid #949090; word-wrap:break-word;">ATTRIBUTE VALUE</td></tr>';
             
@@ -434,9 +444,9 @@ class RaSsoClientHandler
             {
                 echo "<tr><td style='font-weight:bold;border:2px solid #949090;padding:2%;'>";
                 if (!empty($nestedprefix)) {
-                    echo $nestedprefix;
+                    echo htmlspecialchars((string) $nestedprefix, ENT_QUOTES, 'UTF-8');
                 }
-                echo $key."</td><td style='padding:2%;border:2px solid #949090; word-wrap:break-word;'>" . $resource . "</td></tr>";
+                echo htmlspecialchars((string) $key, ENT_QUOTES, 'UTF-8')."</td><td style='padding:2%;border:2px solid #949090; word-wrap:break-word;'>" . htmlspecialchars((string) $resource, ENT_QUOTES, 'UTF-8') . "</td></tr>";
                 $this->attributesNames.= $nestedprefix.$key.',';
             }
         }
@@ -488,6 +498,12 @@ class RaSsoClientHandler
         );
 
         $user = User::getInstance($checkUser->id);
+        if (!$user->id || $user->block) {
+            RaSsoLogger::addLog('SSO refused: the account is blocked', 'WARNING');
+            $app->enqueueMessage('Single Sign On couldn\'t log you in: your account on this website is blocked.', 'warning');
+            $app->redirect(Uri::root() . 'index.php');
+            exit;
+        }
         $this->updateCurrentUserName($user->id, $name);
         $session = Factory::getSession(); // Get current session vars
         // Register the needed session variables
@@ -533,6 +549,7 @@ class RaSsoClientHandler
             RaSsoLogger::addLog('SSO hand-off not possible: no state cookie or no site secret', 'ERROR');
             $app->enqueueMessage('Single Sign On didn\'t complete. Please try again.', 'warning');
             $app->redirect(Uri::root() . 'index.php');
+            exit;
         }
         RaSsoHandoff::setCookie(
             RaSsoHandoff::LOGIN_COOKIE,
