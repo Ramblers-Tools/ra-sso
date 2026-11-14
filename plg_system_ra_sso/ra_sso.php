@@ -85,10 +85,29 @@ class PlgSystemRa_sso extends CMSPlugin
         }
 
         if ($sso_status == 1 && $sso_configured && $isLoginPage) {
+            // Where the login form would go after a password login (its hidden "return" field:
+            // the menu item's login redirect, or the page that sent the member to log in). SSO
+            // goes there too. Without it SSO would go back to the login page itself, which
+            // guests only can see.
+            $returnParam = '';
+            if (!$app->isClient('administrator')
+                && preg_match('#<form[^>]*com-users-login__form[^>]*>(.*?)</form>#is', $body, $form)) {
+                $encoded = '';
+                if (preg_match('#<input[^>]*name=["\']return["\'][^>]*value=["\']([^"\']*)["\']#i', $form[1], $field)
+                    || preg_match('#<input[^>]*value=["\']([^"\']*)["\'][^>]*name=["\']return["\']#i', $form[1], $field)) {
+                    $encoded = html_entity_decode($field[1], ENT_QUOTES);
+                }
+                if (RaSsoHandoff::formReturn($encoded, Uri::root()) === '') {
+                    // As Joomla's own login does when the form has nowhere set: the profile.
+                    $encoded = base64_encode('index.php?option=com_users&view=profile');
+                }
+                $returnParam = '&return=' . rawurlencode($encoded);
+            }
+
             // Your custom SSO login button
             $linkAddPlace = '
                 <div class="form-group mt-2">
-                    <a href="' . Uri::root() . $redirectUrlByVersion . '?rarequest=oauthredirect&app_name=' . $applicationName . '"
+                    <a href="' . Uri::root() . $redirectUrlByVersion . '?rarequest=oauthredirect&app_name=' . rawurlencode((string) $applicationName) . htmlspecialchars($returnParam, ENT_QUOTES) . '"
                        class="btn btn-primary w-100">
                        Login with Single Sign On
                     </a>

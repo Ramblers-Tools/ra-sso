@@ -107,15 +107,47 @@ class RaSsoHandoff
         return (int) $userId > 0 ? (int) $userId : null;
     }
 
-    /** Where to go after logging in: the page SSO started from, if it's on this site. */
+    /**
+     * Where to go after logging in, if it's on this site: a full URL, or one relative to the
+     * site (as Joomla's login form gives, e.g. "index.php?Itemid=12"). Otherwise the home page.
+     */
     public static function returnUrl($url, string $root): string
     {
-        $home = rtrim($root, '/') . '/index.php';
-        if (!is_string($url) || $url === '' || preg_match('/[\x00-\x1f\\\\]/', $url)) {
+        $base = rtrim($root, '/') . '/';
+        $home = $base . 'index.php';
+        if (!is_string($url) || $url === '' || preg_match('/[\x00-\x20\\\\]/', $url)) {
             return $home;
         }
-        $base = rtrim($root, '/') . '/';
+        if (!preg_match('#^[a-z][a-z0-9+.-]*:#i', $url) && strpos($url, '//') !== 0) {
+            if ($url[0] === '/') {
+                // A path on this host: put the scheme and host in front.
+                if (!preg_match('#^([a-z][a-z0-9+.-]*://[^/]+)#i', $base, $m)) {
+                    return $home;
+                }
+                $url = $m[1] . $url;
+            } else {
+                $url = $base . $url;
+            }
+        }
         return stripos($url, $base) === 0 ? $url : $home;
+    }
+
+    /**
+     * The page Joomla's login form would go to after a password login, from the form's hidden
+     * "return" field (base64), as a URL on this site. '' if there isn't a usable one.
+     */
+    public static function formReturn($encoded, string $root): string
+    {
+        if (!is_string($encoded) || $encoded === '' || strlen($encoded) > 2048 || !preg_match('#^[A-Za-z0-9+/=_-]+$#', $encoded)) {
+            return '';
+        }
+        $url = base64_decode(strtr($encoded, '-_', '+/'), true);
+        if ($url === false || $url === '') {
+            return '';
+        }
+        $home = rtrim($root, '/') . '/index.php';
+        $resolved = self::returnUrl($url, $root);
+        return $resolved === $home && $url !== $home ? '' : $resolved;
     }
 
     // -- Joomla side --------------------------------------------------------------------------

@@ -108,7 +108,11 @@ class RaSsoClientHandler
             // (site and administrator referrers are both honoured, so admin-initiated
             // logins return to /administrator instead of always landing on the frontend).
             // Only a page on this site: anything else would make this an open redirect.
-            $loginredirurl = RaSsoHandoff::returnUrl($_SERVER['HTTP_REFERER'] ?? '', Uri::root());
+            // The login form's own destination, when the SSO button on it passed one on.
+            $loginredirurl = RaSsoHandoff::formReturn($params['return'] ?? '', Uri::root());
+            if ($loginredirurl === '') {
+                $loginredirurl = RaSsoHandoff::returnUrl($_SERVER['HTTP_REFERER'] ?? '', Uri::root());
+            }
             RaSsoHandoff::clearOldReturnCookie();
             RaSsoHandoff::setCookie(RaSsoHandoff::RETURN_COOKIE, $loginredirurl, RaSsoHandoff::STATE_SECONDS);
             

@@ -62,6 +62,18 @@ check('http instead of https goes home', RaSsoHandoff::returnUrl('http://www.exa
 check('a backslash goes home', RaSsoHandoff::returnUrl('https://www.example.org.uk/\\evil', $root) === 'https://www.example.org.uk/index.php');
 check('a header break goes home', RaSsoHandoff::returnUrl("https://www.example.org.uk/\r\nX: y", $root) === 'https://www.example.org.uk/index.php');
 check('nothing goes home', RaSsoHandoff::returnUrl('', $root) === 'https://www.example.org.uk/index.php');
+check('a page relative to the site is made full', RaSsoHandoff::returnUrl('index.php?Itemid=12', $root) === 'https://www.example.org.uk/index.php?Itemid=12');
+check('a path on the site is made full', RaSsoHandoff::returnUrl('/walks/programme', $root) === 'https://www.example.org.uk/walks/programme');
+check('a relative page in a subfolder site', RaSsoHandoff::returnUrl('index.php?Itemid=3', 'https://example.org/group/') === 'https://example.org/group/index.php?Itemid=3');
+check('a path outside a subfolder site goes home', RaSsoHandoff::returnUrl('/other/page', 'https://example.org/group/') === 'https://example.org/group/index.php');
+check('javascript: goes home', RaSsoHandoff::returnUrl('javascript:alert(1)', $root) === 'https://www.example.org.uk/index.php');
+
+check('the login form\'s menu-item return is used', RaSsoHandoff::formReturn(base64_encode('index.php?Itemid=12'), $root) === 'https://www.example.org.uk/index.php?Itemid=12');
+check('the login form\'s full-URL return is used', RaSsoHandoff::formReturn(base64_encode('https://www.example.org.uk/my-account'), $root) === 'https://www.example.org.uk/my-account');
+check('a return to the home page is kept', RaSsoHandoff::formReturn(base64_encode('https://www.example.org.uk/index.php'), $root) === 'https://www.example.org.uk/index.php');
+check('a return to another site is not used', RaSsoHandoff::formReturn(base64_encode('https://evil.example/'), $root) === '');
+check('an empty return is not used', RaSsoHandoff::formReturn('', $root) === '' && RaSsoHandoff::formReturn(base64_encode(''), $root) === '');
+check('a return that isn\'t base64 is not used', RaSsoHandoff::formReturn('not base64!', $root) === '');
 
 echo $failures === 0 ? "\nAll passed\n" : "\n$failures failed\n";
 exit($failures === 0 ? 0 : 1);
