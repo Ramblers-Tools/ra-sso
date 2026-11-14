@@ -30,6 +30,16 @@ class RaSsoHandoff
     /** Cookie with the state of the login this browser started. */
     const STATE_COOKIE = 'ra_sso_state';
 
+    /** Cookie with the page to go back to after SSO. */
+    const RETURN_COOKIE = 'ra_sso_return';
+
+    /**
+     * Before 3.1.6 the return page was kept in "returnurl", set without a path, so it landed on
+     * /api/index.php/v1 and was never cleared there. A stale one would win over a new one.
+     */
+    const OLD_RETURN_COOKIE = 'returnurl';
+    const OLD_RETURN_PATHS = ['/', '/api/index.php/v1', '/api/index.php/v1/'];
+
     /** How long the hand-off works, in seconds. */
     const SECONDS = 120;
 
@@ -126,6 +136,15 @@ class RaSsoHandoff
             'httponly' => true,
             'samesite' => 'Lax',
         ]);
+    }
+
+    /** Clears the pre-3.1.6 return cookie wherever it may have been set. */
+    public static function clearOldReturnCookie(): void
+    {
+        foreach (self::OLD_RETURN_PATHS as $path) {
+            setcookie(self::OLD_RETURN_COOKIE, '', ['expires' => time() - 3600, 'path' => $path, 'secure' => true, 'httponly' => true]);
+            setcookie(self::OLD_RETURN_COOKIE, '', ['expires' => time() - 3600, 'path' => $path]);
+        }
     }
 
     // -----------------------------------------------------------------------------------------

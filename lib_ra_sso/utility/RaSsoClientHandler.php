@@ -109,7 +109,8 @@ class RaSsoClientHandler
             // logins return to /administrator instead of always landing on the frontend).
             // Only a page on this site: anything else would make this an open redirect.
             $loginredirurl = RaSsoHandoff::returnUrl($_SERVER['HTTP_REFERER'] ?? '', Uri::root());
-            setcookie("returnurl", $loginredirurl, ['path' => '/', 'secure' => true, 'httponly' => true, 'samesite' => 'Lax']);
+            RaSsoHandoff::clearOldReturnCookie();
+            RaSsoHandoff::setCookie(RaSsoHandoff::RETURN_COOKIE, $loginredirurl, RaSsoHandoff::STATE_SECONDS);
             
             // get Ouath configuration from database
 
@@ -516,8 +517,9 @@ class RaSsoClientHandler
         $cookieData = $input->cookie->getArray();
 
         // Back to the page SSO started from, only if it's on this site.
-        $redirectloginuri = RaSsoHandoff::returnUrl($cookieData['returnurl'] ?? '', Uri::root());
-        setcookie('returnurl', '', time() - 300, '/', "", true, true);
+        $redirectloginuri = RaSsoHandoff::returnUrl($cookieData[RaSsoHandoff::RETURN_COOKIE] ?? '', Uri::root());
+        RaSsoHandoff::setCookie(RaSsoHandoff::RETURN_COOKIE, '', 0);
+        RaSsoHandoff::clearOldReturnCookie();
 
         // Hand the member to the site (the system plugin logs them in there), signed with the
         // site's secret and tied to this browser's state cookie, so it can't be made up.

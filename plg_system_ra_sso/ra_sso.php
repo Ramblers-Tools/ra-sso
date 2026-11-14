@@ -250,7 +250,7 @@ class PlgSystemRa_sso extends CMSPlugin
 
                 $app->redirect(Uri::root() . 'administrator/index.php');
             } else {
-                // This request is the page the member started SSO from (the returnurl cookie
+                // This request is the page the member started SSO from (the ra_sso_return cookie
                 // the login handler redirected to), so carry on to it, now logged in, rather
                 // than always the home page. Only a plain GET of a page on this site;
                 // anything else still goes home. The hand-off cookie is cleared above, so
