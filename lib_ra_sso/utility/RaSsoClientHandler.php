@@ -18,6 +18,7 @@ use Joomla\CMS\User\User;
 
 require_once JPATH_ADMINISTRATOR . DIRECTORY_SEPARATOR . 'components' . DIRECTORY_SEPARATOR . 'com_ra_sso' . DIRECTORY_SEPARATOR . 'helpers' . DIRECTORY_SEPARATOR . 'ra_sso_logger.php';
 require JPATH_ADMINISTRATOR . DIRECTORY_SEPARATOR . 'components' . DIRECTORY_SEPARATOR . 'com_ra_sso' . DIRECTORY_SEPARATOR . 'helpers' . DIRECTORY_SEPARATOR . 'ra_sso_customer_setup.php';
+require_once __DIR__ . DIRECTORY_SEPARATOR . 'RaSsoHandoff.php';
 
 class RaSsoClientHandler
 {
@@ -105,14 +106,10 @@ class RaSsoClientHandler
 
             // save the referrer in cookie so that we can come back to origin after SSO
             // (site and administrator referrers are both honoured, so admin-initiated
-            // logins return to /administrator instead of always landing on the frontend)
-            if (isset($_SERVER['HTTP_REFERER'])) {
-                $loginredirurl = $_SERVER['HTTP_REFERER'];
-            }
-
-            if (!empty($loginredirurl)) {
-                setcookie("returnurl", $loginredirurl);
-            }
+            // logins return to /administrator instead of always landing on the frontend).
+            // Only a page on this site: anything else would make this an open redirect.
+            $loginredirurl = RaSsoHandoff::returnUrl($_SERVER['HTTP_REFERER'] ?? '', Uri::root());
+            setcookie("returnurl", $loginredirurl, ['path' => '/', 'secure' => true, 'httponly' => true, 'samesite' => 'Lax']);
             
             // get Ouath configuration from database
 
@@ -141,13 +138,15 @@ class RaSsoClientHandler
                 $app->redirect(Uri::root());
             }            
 
-            $state = base64_encode($appname);
+            // A random state, kept in a cookie on this browser and checked on the way back.
+            $state = RaSsoHandoff::newState((string) $appname);
+            RaSsoHandoff::setCookie(RaSsoHandoff::STATE_COOKIE, $state, RaSsoHandoff::STATE_SECONDS);
             $authorizationUrl = $appdata['authorize_endpoint'];
 
             if (strpos($authorizationUrl, '?') !== false) {
-                $authorizationUrl = $authorizationUrl . "&client_id=" . $appdata['client_id'] . "&scope=" . $appdata['app_scope'] . "&redirect_uri=" . Uri::root() . $redirectUrlByVersion ."&response_type=code&state=" . $state;
+                $authorizationUrl = $authorizationUrl . "&client_id=" . $appdata['client_id'] . "&scope=" . $appdata['app_scope'] . "&redirect_uri=" . Uri::root() . $redirectUrlByVersion ."&response_type=code&state=" . rawurlencode($state);
             } else {
-                $authorizationUrl = $authorizationUrl . "?client_id=" . $appdata['client_id'] . "&scope=" . $appdata['app_scope'] . "&redirect_uri=" . Uri::root() . $redirectUrlByVersion ."&response_type=code&state=" . $state;
+                $authorizationUrl = $authorizationUrl . "?client_id=" . $appdata['client_id'] . "&scope=" . $appdata['app_scope'] . "&redirect_uri=" . Uri::root() . $redirectUrlByVersion ."&response_type=code&state=" . rawurlencode($state);
             }
 
             $session->set('oauth2state', $state);
@@ -165,13 +164,25 @@ class RaSsoClientHandler
                 session_start();
             }
             try {
-                // get the app name from session or by decoding state
+                // Only finish a login this browser started: the state must match its cookie.
+                if (method_exists($app, 'getInput')) {
+                    $stateCookie = $app->getInput()->cookie->getString(RaSsoHandoff::STATE_COOKIE, '');
+                } else {
+                    $stateCookie = $app->input->cookie->getString(RaSsoHandoff::STATE_COOKIE, '');
+                }
+                if (!RaSsoHandoff::stateMatches($stateCookie, $params['state'] ?? null)) {
+                    RaSsoLogger::addLog('SSO reply did not match a login started in this browser', 'WARNING');
+                    $app->enqueueMessage('Single Sign On didn\'t complete. Please try again.', 'warning');
+                    $app->redirect(Uri::root() . 'index.php');
+                }
+
+                // get the app name from session or from the state
                 $currentappname = "";
                 $session_var = $session->get('appname');
                 if (isset($session_var) && !empty($session_var)) {
                     $currentappname = $session->get('appname');
-                } else if (isset($params['state']) && !empty($params['state'])) {
-                    $currentappname = base64_decode($params['state']);
+                } else {
+                    $currentappname = RaSsoHandoff::appFromState($stateCookie);
                 }
                 if (empty($currentappname)) {
                     RaSsoLogger::addLog('No request found for this application', 'ERROR');
@@ -504,18 +515,24 @@ class RaSsoClientHandler
         }
         $cookieData = $input->cookie->getArray();
 
-        if (!empty($cookieData['returnurl'])) {
-            $redirectloginuri = $cookieData['returnurl'];
-        }
-        else
-        {
-            $redirectloginuri = Uri::root() . 'index.php?';
-        }
+        // Back to the page SSO started from, only if it's on this site.
+        $redirectloginuri = RaSsoHandoff::returnUrl($cookieData['returnurl'] ?? '', Uri::root());
         setcookie('returnurl', '', time() - 300, '/', "", true, true);
 
-        setcookie('mo_site', 'site', time() + 300, '/', "",  true, true);
-        setcookie('session_id', base64_encode($sessionId), time() + 300, '/', "",  true, true);
-        setcookie('user_id', base64_encode($user->id), time() + 300, '/', "",  true, true);
+        // Hand the member to the site (the system plugin logs them in there), signed with the
+        // site's secret and tied to this browser's state cookie, so it can't be made up.
+        $state = (string) $input->cookie->getString(RaSsoHandoff::STATE_COOKIE, '');
+        $secret = RaSsoHandoff::secret();
+        if ($state === '' || $secret === '') {
+            RaSsoLogger::addLog('SSO hand-off not possible: no state cookie or no site secret', 'ERROR');
+            $app->enqueueMessage('Single Sign On didn\'t complete. Please try again.', 'warning');
+            $app->redirect(Uri::root() . 'index.php');
+        }
+        RaSsoHandoff::setCookie(
+            RaSsoHandoff::LOGIN_COOKIE,
+            RaSsoHandoff::create((int) $user->id, $state, $secret, time()),
+            RaSsoHandoff::SECONDS
+        );
 
         $app->redirect($redirectloginuri);
     }

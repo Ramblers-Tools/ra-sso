@@ -15,6 +15,8 @@ defined('_JEXEC') or die('Restricted access');
 use Joomla\CMS\Plugin\CMSPlugin;
 use Joomla\CMS\Authentication\AuthenticationResponse;
 use Joomla\CMS\Factory;
+use Joomla\CMS\HTML\HTMLHelper;
+use Joomla\CMS\Session\Session;
 use Joomla\CMS\Uri\Uri;
 use Joomla\CMS\User\User;
 use Joomla\CMS\Installer\Installer;
@@ -23,6 +25,7 @@ use Joomla\CMS\Version;
 
 jimport('joomla.plugin.plugin');
 jimport('ra_sso.utility.RaSsoClientHandler');
+jimport('ra_sso.utility.RaSsoHandoff');
 
 require_once JPATH_ADMINISTRATOR.DIRECTORY_SEPARATOR.'components'.DIRECTORY_SEPARATOR.'com_ra_sso'.DIRECTORY_SEPARATOR.'helpers'.DIRECTORY_SEPARATOR.'ra_sso_customer_setup.php';
 require_once JPATH_ADMINISTRATOR . DIRECTORY_SEPARATOR . 'components' . DIRECTORY_SEPARATOR . 'com_ra_sso' . DIRECTORY_SEPARATOR . 'helpers' . DIRECTORY_SEPARATOR . 'ra_sso_utility.php';
@@ -118,7 +121,9 @@ class PlgSystemRa_sso extends CMSPlugin
 
         $lang->load('plg_system_ra_sso', JPATH_ADMINISTRATOR);
 
-        if (isset($post['mojsp_feedback'])) {
+        // The uninstall feedback form (shown by onExtensionBeforeUninstall) uninstalls the
+        // extensions it lists. Only for a backend user allowed to uninstall, from the form itself.
+        if (isset($post['mojsp_feedback']) && $this->canUninstall($app) && Session::checkToken('post')) {
            
             $radio = !empty($post['deactivate_plugin']) ? $post['deactivate_plugin'] : '';
             $data = !empty($post['query_feedback']) ? $post['query_feedback'] : '';
@@ -147,8 +152,9 @@ class PlgSystemRa_sso extends CMSPlugin
             $data1 = $radio . ' : ' . $data;
             include_once JPATH_SITE . DIRECTORY_SEPARATOR . 'libraries' . DIRECTORY_SEPARATOR . 'src' . DIRECTORY_SEPARATOR . 'Installer' . DIRECTORY_SEPARATOR . 'Installer.php';
             
-            foreach ($post['result'] as $fbkey) 
+            foreach ((array) ($post['result'] ?? []) as $fbkey) 
             {
+                $fbkey = (int) $fbkey;
                 $result = RaSsoClientHandler::miniOauthFetchDb('#__extensions', array('extension_id'=>$fbkey), 'loadColumn', 'type');
                 $type = 0;
                 foreach ($result as $results) 
@@ -164,59 +170,65 @@ class PlgSystemRa_sso extends CMSPlugin
             }
         }
 
-        if ($cookie->get('mo_site', null)) {
-            $rawSessionId = $cookie->get('session_id', '');
-            $session_id = $rawSessionId !== '' ? base64_decode($rawSessionId) : '';
-            $rawUserId = $cookie->get('user_id', '');
-            $user_id = $rawUserId !== '' ? base64_decode($rawUserId) : '';
+        // Cookies from before 3.1.6 named the member in plain text. Never trusted; just cleared.
+        foreach (RaSsoHandoff::OLD_COOKIES as $old) {
+            if ($cookie->get($old, null) !== null) {
+                RaSsoHandoff::setCookie($old, '', 0);
+            }
+        }
 
-            if ($session_id && $user_id) {
-                setcookie('mo_site', '', time() - 300, '/', "",  true, true);
-                setcookie('session_id', '', time() - 300, '/', "", true, true);
-                setcookie('user_id', '', time() - 300, '/', "", true, true);
+        // The SSO callback runs in the API application; the member is logged in on the next
+        // request, to the site (or the backend).
+        $handoff = $app->isClient('api') ? '' : $cookie->getString(RaSsoHandoff::LOGIN_COOKIE, '');
+        if ($handoff !== '') {
+            // Used once: cleared whatever happens next.
+            RaSsoHandoff::setCookie(RaSsoHandoff::LOGIN_COOKIE, '', 0);
+            $state = $cookie->getString(RaSsoHandoff::STATE_COOKIE, '');
+            RaSsoHandoff::setCookie(RaSsoHandoff::STATE_COOKIE, '', 0);
 
-                if (method_exists($app, 'getSession')) {
-                    $session = $app->getSession();   // Joomla 4+
-                } else {
-                    $session = Factory::getSession();// Joomla 3
-                }
-            
-                if($user_id) {
-                    $user = User::getInstance((int) $user_id);
+            if (method_exists($app, 'getSession')) {
+                $session = $app->getSession();   // Joomla 4+
+            } else {
+                $session = Factory::getSession();// Joomla 3
+            }
 
-                    if (!$user->guest && $user->id) {
-                        $response = new AuthenticationResponse();
-                        $response->status = 1;
-                        $response->type = 'OAuth';
-                        $response->username = $user->username;
-                        $response->email = $user->email;
-                        $response->fullname = $user->name;
+            $user_id = RaSsoHandoff::verify($handoff, $state, RaSsoHandoff::secret(), time());
+            if ($user_id === null) {
+                RaSsoLogger::addLog('SSO hand-off cookie was not genuine, or had expired', 'WARNING');
+            } else {
+                $user = User::getInstance($user_id);
 
-                        $app->triggerEvent(
-                            'onUserLogin',
-                            array(
-                                (array) $response,
-                                array('remember' => false)
-                            )
-                        );
+                if (!$user->guest && $user->id && !$user->block) {
+                    $response = new AuthenticationResponse();
+                    $response->status = 1;
+                    $response->type = 'OAuth';
+                    $response->username = $user->username;
+                    $response->email = $user->email;
+                    $response->fullname = $user->name;
 
-                        $session->set('user', $user);
-                        $session->set('session_id', $session_id);
+                    $app->triggerEvent(
+                        'onUserLogin',
+                        array(
+                            (array) $response,
+                            array('remember' => false)
+                        )
+                    );
 
-                        if (method_exists($app, 'loadIdentity')) {
-                            $app->loadIdentity($user);
-                        }
+                    $session->set('user', $user);
 
-                        RaSsoClientHandler::miniOauthUpdateDb(
-                            '#__session',
-                            array(
-                                'username' => $user->username,
-                                'guest' => '0',
-                                'userid' => $user->id
-                            ),
-                            array('session_id' => $session->getId())
-                        );
+                    if (method_exists($app, 'loadIdentity')) {
+                        $app->loadIdentity($user);
                     }
+
+                    RaSsoClientHandler::miniOauthUpdateDb(
+                        '#__session',
+                        array(
+                            'username' => $user->username,
+                            'guest' => '0',
+                            'userid' => $user->id
+                        ),
+                        array('session_id' => $session->getId())
+                    );
                 }
             }
 
@@ -241,8 +253,8 @@ class PlgSystemRa_sso extends CMSPlugin
                 // This request is the page the member started SSO from (the returnurl cookie
                 // the login handler redirected to), so carry on to it, now logged in, rather
                 // than always the home page. Only a plain GET of a page on this site;
-                // anything else still goes home. The mo_site cookie is cleared above, so this
-                // happens once.
+                // anything else still goes home. The hand-off cookie is cleared above, so
+                // this happens once.
                 $here = Uri::getInstance()->toString();
                 $back = $app->isClient('site') && $input->getMethod() === 'GET' && Uri::isInternal($here)
                         ? $here
@@ -308,6 +320,7 @@ class PlgSystemRa_sso extends CMSPlugin
                                 <h3> <?php echo Text::_('PLG_SYSTEM_RA_SSO_FEEDBACK_FORM_WHAT_HAPPENED'); ?> </h3>
                                 <form name="f" method="post" action="" id="mojsp_feedback">
                                     <input type="hidden" name="mojsp_feedback" value="mojsp_feedback"/>
+                                    <?php echo HTMLHelper::_('form.token'); ?>
                                     <div>
                                         <p style="margin-left:2%">
                                         <?php
@@ -339,7 +352,7 @@ class PlgSystemRa_sso extends CMSPlugin
                                        </tr>
                                             <?php
                                             foreach ($tpostData['cid'] as $key) { ?>
-                                            <input type="hidden" name="result[]" value=<?php echo $key ?>>
+                                            <input type="hidden" name="result[]" value="<?php echo (int) $key ?>">
                                             <?php } ?>
                                         <br><br>
                                         <div class="mojsp_modal-footer">
@@ -476,6 +489,16 @@ class PlgSystemRa_sso extends CMSPlugin
                 }
             }
         }
+    }
+
+    /** A backend user allowed to uninstall extensions. */
+    private function canUninstall($app): bool
+    {
+        if (!$app->isClient('administrator')) {
+            return false;
+        }
+        $user = method_exists($app, 'getIdentity') ? $app->getIdentity() : Factory::getUser();
+        return $user && !$user->guest && $user->authorise('core.delete', 'com_installer');
     }
 
     public function onAfterRoute()
