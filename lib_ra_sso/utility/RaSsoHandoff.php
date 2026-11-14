@@ -145,6 +145,14 @@ class RaSsoHandoff
         if ($url === false || $url === '') {
             return '';
         }
+        if (ctype_digit($url)) {
+            // The login menu item's "Login Redirect" is a menu item ID; Joomla's login treats a
+            // bare number as that menu item.
+            $url = (int) $url > 0 ? 'index.php?Itemid=' . (int) $url : '';
+            if ($url === '') {
+                return '';
+            }
+        }
         $home = rtrim($root, '/') . '/index.php';
         $resolved = self::returnUrl($url, $root);
         return $resolved === $home && $url !== $home ? '' : $resolved;

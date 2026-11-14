@@ -70,6 +70,8 @@ check('javascript: goes home', RaSsoHandoff::returnUrl('javascript:alert(1)', $r
 
 check('the login form\'s menu-item return is used', RaSsoHandoff::formReturn(base64_encode('index.php?Itemid=12'), $root) === 'https://www.example.org.uk/index.php?Itemid=12');
 check('the login form\'s full-URL return is used', RaSsoHandoff::formReturn(base64_encode('https://www.example.org.uk/my-account'), $root) === 'https://www.example.org.uk/my-account');
+check('a menu item ID is that menu item', RaSsoHandoff::formReturn(base64_encode('2654'), $root) === 'https://www.example.org.uk/index.php?Itemid=2654');
+check('menu item 0 is not used', RaSsoHandoff::formReturn(base64_encode('0'), $root) === '');
 check('a return to the home page is kept', RaSsoHandoff::formReturn(base64_encode('https://www.example.org.uk/index.php'), $root) === 'https://www.example.org.uk/index.php');
 check('a return to another site is not used', RaSsoHandoff::formReturn(base64_encode('https://evil.example/'), $root) === '');
 check('an empty return is not used', RaSsoHandoff::formReturn('', $root) === '' && RaSsoHandoff::formReturn(base64_encode(''), $root) === '');
