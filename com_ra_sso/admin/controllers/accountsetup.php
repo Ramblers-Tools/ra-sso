@@ -12,6 +12,7 @@ use Joomla\CMS\MVC\Controller\FormController;
 use Joomla\CMS\Factory;
 use Joomla\CMS\Uri\Uri;
 use Joomla\CMS\Language\Text;
+use Joomla\CMS\Session\Session;
 
 class RaSsoControllerAccountSetup extends FormController
 {
@@ -19,6 +20,20 @@ class RaSsoControllerAccountSetup extends FormController
     {
         $this->view_list = 'accountsetup';
         parent::__construct();
+    }
+
+    /**
+     * Every task here changes the SSO set-up or hands out its settings, so each one needs the
+     * form token from this site's own pages. Without it, another website an administrator
+     * visited could change the set-up in their name.
+     */
+    public function execute($task)
+    {
+        if (!Session::checkToken('post') && !Session::checkToken('get')) {
+            $this->setRedirect('index.php?option=com_ra_sso&view=accountsetup', Text::_('JINVALID_TOKEN_NOTICE'), 'error');
+            return false;
+        }
+        return parent::execute($task);
     }
     
     function saveAdminMail()
@@ -154,6 +169,15 @@ class RaSsoControllerAccountSetup extends FormController
                 $in_header_or_body ="inBody";
             }
     
+            // The token and user info answers decide who is logged in: plain http isn't allowed.
+            foreach (array($authorizeurl, $accesstokenurl, $resourceownerdetailsurl) as $endpoint) {
+                if (trim($endpoint) !== '' && !RaSsoHandler::isHttpsUrl(trim($endpoint))) {
+                    $returnURL = 'index.php?option=com_ra_sso&view=accountsetup&tab-panel=configuration&moAuthAddApp=' . urlencode((string) $post['mo_oauth_app_name']) . '&progress=step2';
+                    $this->setRedirect($returnURL, Text::_('COM_RA_SSO_ENDPOINT_NOT_HTTPS'), 'error');
+                    return;
+                }
+            }
+
             $db     = self::getDBObject();
             $query  = $db->getQuery(true);
             $fields = array(

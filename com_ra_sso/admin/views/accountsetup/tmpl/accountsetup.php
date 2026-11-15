@@ -378,6 +378,7 @@ function configuration($OauthApp,$appLabel)
                     </div>
                     <div class="mo_boot_col-lg-6 mo_boot_col-sm-4">
                         <form method="post" name="clear_config" action="<?php echo Route::_('index.php?option=com_ra_sso&view=accountsetup&task=accountsetup.clearConfig'); ?>" class="mo_boot_float-right mo_boot_mx-1" onclick="return confirm('<?php echo Text::_('COM_RA_SSO_DELETE_APPLICATION_CONFIRMATION');?>');">
+                            <?php echo HTMLHelper::_('form.token'); ?>
                             <button class="mo_oauth_clear_config_btn" title="<?php echo Text::_('COM_RA_SSO_CLEAR_CONFIGURATION'); ?>"><span><i class="fa-regular fa-trash-can"></i></span></button>
                         </form>
                     </div>
@@ -405,7 +406,7 @@ function configuration($OauthApp,$appLabel)
                                 </div>
                                 <div class="mo_boot_col-sm-8">
                                     <?php echo "<span class='mo_oauth_label'>".$OauthApp['label']."</span>";?>
-                                    <input type="hidden" name="mo_oauth_app_name" value="<?php echo $mo_oauth_app; ?>">
+                                    <input type="hidden" name="mo_oauth_app_name" value="<?php echo htmlspecialchars((string) $mo_oauth_app, ENT_QUOTES, 'UTF-8'); ?>">
                                 </div>
                             </div>
                             <div class="mo_boot_row mo_boot_mt-3">
@@ -415,7 +416,8 @@ function configuration($OauthApp,$appLabel)
                                 <div class="mo_boot_col-sm-8 mo_boot_m-0">
                                     <form id="oauth_config_form_step1" method="post" 
                                           action="<?php echo Route::_('index.php?option=com_ra_sso&view=accountsetup&task=accountsetup.saveConfig'); ?>">
-                                        <input type="hidden" name="mo_oauth_app_name" value="<?php echo $mo_oauth_app; ?>">
+                                        <?php echo HTMLHelper::_('form.token'); ?>
+                                        <input type="hidden" name="mo_oauth_app_name" value="<?php echo htmlspecialchars((string) $mo_oauth_app, ENT_QUOTES, 'UTF-8'); ?>">
                                         <input type="hidden" name="oauth_config_form_step1" value="true">
                                         <div class="mo_boot_row mo_boot_m-0 mo_boot_p-0">
                                             <div class="mo_boot_col-sm-3 mo_boot_m-0 mo_boot_p-0">
@@ -469,14 +471,15 @@ function configuration($OauthApp,$appLabel)
                     </div>
                     <div id="mo_oauth_tab_content_step2" class="mo_boot_col-sm-12 mo_boot_mt-3" style="display: <?php echo $progress === 'step2' ? 'block' : 'none'; ?>;">
                         <form id="oauth_config_form_step2" name="" method="post" action="<?php echo Route::_('index.php?option=com_ra_sso&view=accountsetup&task=accountsetup.saveConfig'); ?>">
+                            <?php echo HTMLHelper::_('form.token'); ?>
                             <input type="hidden" name="oauth_config_form_step2" value="true">
                             <div class="mo_boot_row mo_boot_m-1 mo_boot_mt-3">
                                 <div class="mo_boot_col-sm-12">
                                     <div class="mo_boot_row">
                                         <div class="mo_boot_col-sm-12">
                                             <input type="hidden" id="mo_oauth_custom_app_name" name="mo_oauth_custom_app_name" value='<?php echo $OauthApp['label']; ?>' required>
-                                            <input type="hidden" name="raSsoAppName" value="<?php echo $appLabel; ?>">
-                                            <input type="hidden" name="mo_oauth_app_name" value="<?php echo $mo_oauth_app; ?>">
+                                            <input type="hidden" name="raSsoAppName" value="<?php echo htmlspecialchars((string) $appLabel, ENT_QUOTES, 'UTF-8'); ?>">
+                                            <input type="hidden" name="mo_oauth_app_name" value="<?php echo htmlspecialchars((string) $mo_oauth_app, ENT_QUOTES, 'UTF-8'); ?>">
                                         </div>
                                     </div>
                                     <div class="mo_boot_row mo_boot_mt-3">
@@ -695,6 +698,7 @@ function configuration($OauthApp,$appLabel)
                             </div>
                         </div>
                         <form id="oauth_mapping_form" name="oauth_config_form" method="post" action="<?php echo Route::_('index.php?option=com_ra_sso&view=accountsetup&task=accountsetup.saveMapping'); ?>">
+                            <?php echo HTMLHelper::_('form.token'); ?>
                             <div class="mo_boot_row mo_boot_p-3 mo_boot_my-0 mo_boot_d-flex mo_oauth_align-items-center">
                                 <div class="mo_boot_col-sm-3">
                                     <strong><?php echo Text::_('COM_RA_SSO_EMAIL_ATTR'); ?><span class="mo_oauth_highlight">*</span> : </strong>
@@ -716,7 +720,7 @@ function configuration($OauthApp,$appLabel)
                                                     $checked = "";
                                                 }
                                                 if($value!="") {
-                                                    echo"<option ".$checked." value='".$value."'>".$value."</option>";
+                                                    echo"<option ".$checked." value='".htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8')."'>".htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8')."</option>";
                                                 }
                                             }
                                             ?>
@@ -752,7 +756,7 @@ function configuration($OauthApp,$appLabel)
                                                         $checked = "";
                                                     }
                                                     if($value!="") {
-                                                        echo"<option ".$checked." value='".$value."'>".$value."</option>";
+                                                        echo"<option ".$checked." value='".htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8')."'>".htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8')."</option>";
                                                     }
                                                 }
                                                 ?>
@@ -820,7 +824,8 @@ function configuration($OauthApp,$appLabel)
 
                     <div id="mo_oauth_tab_content_advance_settings" class="mo_boot_col-sm-12 mo_boot_mt-3" style="display: <?php echo $progress === 'advance_setting' ? 'block' : 'none'; ?>;">
                         <form method="POST" action="<?php echo Route::_('index.php?option=com_ra_sso&view=accountsetup&task=accountsetup.enableSSO'); ?>">
-                            <input type="hidden" name="mo_oauth_app_name" value="<?php echo $mo_oauth_app; ?>">
+                            <?php echo HTMLHelper::_('form.token'); ?>
+                            <input type="hidden" name="mo_oauth_app_name" value="<?php echo htmlspecialchars((string) $mo_oauth_app, ENT_QUOTES, 'UTF-8'); ?>">
                             <div class="mo_boot_row mo_boot_p-3">
                                 <div class="mo_boot_col-sm-3">
                                     <strong><?php echo Text::_('COM_RA_SSO_SSO_ENABLE_DISABLE'); ?></strong>:
@@ -850,7 +855,7 @@ function configuration($OauthApp,$appLabel)
 
     <script>
         function testConfiguration() {
-            var appname = "<?php echo $appLabel; ?>";
+            var appname = <?php echo json_encode((string) $appLabel, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
             var winl = (screen.width - 800) / 2;
             var wint = (screen.height - 600) / 2;
                 
@@ -1359,6 +1364,7 @@ function proxy_setup()
                 <h1 class="mo_export_heading mo_boot_pt-4 "><?php echo Text::_('COM_RA_SSO_PROXY_SETUP'); ?></h1>
                 <p><?php echo Text::_('COM_RA_SSO_PROXY_SETUP_DESCRIPTION'); ?></p>
                 <form action="<?php echo Route::_('index.php?option=com_ra_sso&task=accountsetup.proxyConfig'); ?>" method="post" name="proxy_form">
+                    <?php echo HTMLHelper::_('form.token'); ?>
                     <div class="mo_boot_col-sm-12">
                         <div class="mo_boot_row">
                             <div class="mo_boot_col-sm-3">
@@ -1399,7 +1405,7 @@ function proxy_setup()
                         <div class="mo_boot_row mo_boot_mt-2">
                             <div class="mo_boot_col-sm-12 mo_boot_mt-3 mo_boot_text-center mo_boot_mb-3">
                                 <input type="submit" value=<?php echo Text::_('COM_RA_SSO_SAVE'); ?> class="mo_boot_btn mo_oauth_cursor mo_oauth_all_btn mo_boot_p-1">
-                                <input type="button" value=<?php echo Text::_('COM_RA_SSO_RESET'); ?> onclick="window.location='<?php echo Route::_('index.php?option=com_ra_sso&task=accountsetup.proxyConfigReset'); ?>'" class="mo_boot_btn mo_oauth_cursor mo_oauth_all_btn mo_boot_p-1">
+                                <input type="button" value=<?php echo Text::_('COM_RA_SSO_RESET'); ?> onclick="window.location='<?php echo Route::_('index.php?option=com_ra_sso&task=accountsetup.proxyConfigReset&' . \Joomla\CMS\Session\Session::getFormToken() . '=1'); ?>'" class="mo_boot_btn mo_oauth_cursor mo_oauth_all_btn mo_boot_p-1">
                             </div>
                         </div>
                     </div>
@@ -1428,7 +1434,8 @@ function raSsoConfiguration()
     $get = $input->get->getArray();
     $attribute = getAppDetails();
     $isAppConfigured = empty($attribute['client_secret']) || empty($attribute['client_id']) || empty($attribute['custom_app'])|| empty($attribute['redirecturi'])?false:true;
-    if(isset($get['moAuthAddApp']) && !empty($get['moAuthAddApp']) ) {
+    // Only one of the known apps: the name is printed into the page and its script.
+    if(isset($get['moAuthAddApp']) && is_string($get['moAuthAddApp']) && isset($appArray[$get['moAuthAddApp']]) ) {
         configuration($appArray[$get['moAuthAddApp']], $get['moAuthAddApp']);
         return;
     }
@@ -1942,7 +1949,7 @@ function moImportAndExport($mo_oauth_app)
             <div class="mo_boot_mb-2" ><?php echo Text::_('COM_RA_SSO_EXPORT_CONFIGURATION_TEXT');?></div>
 
             <div class="mo_boot_mt-4 mo_boot_mb-3">
-                <a href='index.php?option=com_ra_sso&view=accountsetup&task=accountsetup.exportConfiguration' class="oauth_blue_button mo_boot_p-2">
+                <a href='index.php?option=com_ra_sso&view=accountsetup&task=accountsetup.exportConfiguration&<?php echo \Joomla\CMS\Session\Session::getFormToken(); ?>=1' class="oauth_blue_button mo_boot_p-2">
                     <span><i class="fa-duotone fa-solid fa-download"></i></span>
                     <?php echo Text::_('COM_RA_SSO_EXPORT_CONFIGURATION');?>
                 </a>
@@ -2076,10 +2083,10 @@ function raSsoLoggerReport()
                                     $messData = json_decode($logs_data['message'], true);
                                     ?>
                                     <tr>
-                                        <td class="timestamp-cell"><?php echo $logs_data['timestamp']; ?></td>
-                                        <td class="priority-cell"><?php echo $logs_data['log_level'] ?></td>
-                                        <td class="code-cell"><?php echo ($messData['code'] . ' : ' . $messData['issue']); ?></td>
-                                        <td class="path-cell"><?php echo ($logs_data['file'] . ' ' . Text::_('COM_RA_SSO_LOGS_IN_FUNCTION') . ' ' . $logs_data['function_call'] . ' ' .  Text::_('COM_RA_SSO_LOGS_AT_LINE') . ' ' . $logs_data['line_number']); ?></td>
+                                        <td class="timestamp-cell"><?php echo htmlspecialchars((string) $logs_data['timestamp'], ENT_QUOTES, 'UTF-8'); ?></td>
+                                        <td class="priority-cell"><?php echo htmlspecialchars((string) $logs_data['log_level'], ENT_QUOTES, 'UTF-8'); ?></td>
+                                        <td class="code-cell"><?php echo htmlspecialchars(($messData['code'] ?? '') . ' : ' . ($messData['issue'] ?? $logs_data['message']), ENT_QUOTES, 'UTF-8'); ?></td>
+                                        <td class="path-cell"><?php echo htmlspecialchars($logs_data['file'] . ' ' . Text::_('COM_RA_SSO_LOGS_IN_FUNCTION') . ' ' . $logs_data['function_call'] . ' ' .  Text::_('COM_RA_SSO_LOGS_AT_LINE') . ' ' . $logs_data['line_number'], ENT_QUOTES, 'UTF-8'); ?></td>
                                     </tr>
                                     <?php
                                 }
