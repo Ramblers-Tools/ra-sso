@@ -250,9 +250,8 @@ class RaSsoClientHandler
                 $mo_oauth_handler->printError();
                 list($email,$name)=$this->getEmailAndName($resourceOwner, $email_attr, $name_attr);
                 // The account is found by email, and SSO can log in to the backend, so only take
-                // an email the provider hasn't said is unverified.
-                $verified = is_array($resourceOwner) && array_key_exists('email_verified', $resourceOwner) ? $resourceOwner['email_verified'] : true;
-                if (!is_string($email) || $email === '' || $verified === false || $verified === 'false' || $verified === 0 || $verified === '0') {
+                // an email the provider says is verified.
+                if (!is_string($email) || $email === '' || !RaSsoHandler::emailVerified($resourceOwner)) {
                     RaSsoLogger::addLog('SSO refused: email missing or not verified by the provider', 'WARNING');
                     $app->enqueueMessage('Single Sign On couldn\'t log you in: your email address isn\'t verified with your Ramblers account.', 'warning');
                     $app->redirect(Uri::root() . 'index.php');

@@ -33,7 +33,16 @@ class RaSsoHandler
         }
 
         $session = Factory::getSession();
+        if (!self::isHttpsUrl($tokenendpoint)) {
+            RaSsoLogger::addLog('Error : the token endpoint is not https', 'CRITICAL', 'RASSO-A02');
+            $this->setError('[RASSO-A02] : ' . Text::_('COM_RA_SSO_ENDPOINT_NOT_HTTPS'));
+            $session->set('mo_reason', 'The token endpoint must use https.');
+            return array('', '');
+        }
         $ch = curl_init($tokenendpoint);
+        if (defined('CURLOPT_PROTOCOLS')) {
+            curl_setopt($ch, CURLOPT_PROTOCOLS, CURLPROTO_HTTPS);
+        }
         // The token request carries the client secret: never follow a redirect with it, and
         // always check the provider's certificate (the answer decides who is logged in).
         curl_setopt($ch, CURLOPT_FOLLOWLOCATION, false);
@@ -127,6 +136,29 @@ class RaSsoHandler
         return false;
     }
 
+    /** True for an absolute https:// address with a host. The provider's answers decide who is
+     *  logged in, and the token request carries the client secret, so plain http is refused. */
+    static function isHttpsUrl($url): bool
+    {
+        if (!is_string($url) || $url === '' || preg_match('/[\x00-\x20\\\\]/', $url)) {
+            return false;
+        }
+        $parts = parse_url($url);
+        return is_array($parts) && isset($parts['scheme'], $parts['host'])
+            && strtolower($parts['scheme']) === 'https' && $parts['host'] !== '';
+    }
+
+    /** True only when the provider says the email address is verified (true, 1, "1" or "true").
+     *  Accounts are found by email, so a missing or unclear answer is not enough. */
+    static function emailVerified($claims): bool
+    {
+        if (!is_array($claims) || !array_key_exists('email_verified', $claims)) {
+            return false;
+        }
+        $value = $claims['email_verified'];
+        return $value === true || $value === 1 || $value === '1' || (is_string($value) && strtolower($value) === 'true');
+    }
+
     /** The ID token's claims, or why it can't be used. Plain PHP, for tests. */
     static function idTokenClaims($id_token, $clientId, int $now)
     {
@@ -160,7 +192,16 @@ class RaSsoHandler
         if(!empty($idToken) && !is_null($idToken)) {
             return $this->getResourceOwnerFromIdToken($idToken, $clientId);
         }
+        if (!self::isHttpsUrl($resourceownerdetailsurl)) {
+            RaSsoLogger::addLog('Error : the user info endpoint is not https', 'CRITICAL', 'RASSO-A02');
+            $this->setError('[RASSO-A02] : ' . Text::_('COM_RA_SSO_ENDPOINT_NOT_HTTPS'));
+            $session->set('mo_reason', 'The user info endpoint must use https.');
+            return array();
+        }
         $ch = curl_init($resourceownerdetailsurl);
+        if (defined('CURLOPT_PROTOCOLS')) {
+            curl_setopt($ch, CURLOPT_PROTOCOLS, CURLPROTO_HTTPS);
+        }
         curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
         curl_setopt($ch, CURLOPT_ENCODING, "");
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);

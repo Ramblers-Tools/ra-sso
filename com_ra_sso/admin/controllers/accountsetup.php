@@ -169,6 +169,15 @@ class RaSsoControllerAccountSetup extends FormController
                 $in_header_or_body ="inBody";
             }
     
+            // The token and user info answers decide who is logged in: plain http isn't allowed.
+            foreach (array($authorizeurl, $accesstokenurl, $resourceownerdetailsurl) as $endpoint) {
+                if (trim($endpoint) !== '' && !RaSsoHandler::isHttpsUrl(trim($endpoint))) {
+                    $returnURL = 'index.php?option=com_ra_sso&view=accountsetup&tab-panel=configuration&moAuthAddApp=' . urlencode((string) $post['mo_oauth_app_name']) . '&progress=step2';
+                    $this->setRedirect($returnURL, Text::_('COM_RA_SSO_ENDPOINT_NOT_HTTPS'), 'error');
+                    return;
+                }
+            }
+
             $db     = self::getDBObject();
             $query  = $db->getQuery(true);
             $fields = array(

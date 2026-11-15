@@ -46,6 +46,29 @@ namespace {
     check('rubbish is refused', is_string(RaSsoHandler::idTokenClaims('abc', 'client-1', $now)));
     check('a non-string is refused', is_string(RaSsoHandler::idTokenClaims(['x'], 'client-1', $now)));
 
+
+    // Only https endpoints.
+    check('https endpoint allowed', RaSsoHandler::isHttpsUrl('https://login.example.org/oauth/token'));
+    check('HTTPS in capitals allowed', RaSsoHandler::isHttpsUrl('HTTPS://login.example.org/token'));
+    check('http endpoint refused', !RaSsoHandler::isHttpsUrl('http://login.example.org/oauth/token'));
+    check('relative endpoint refused', !RaSsoHandler::isHttpsUrl('/oauth/token'));
+    check('no host refused', !RaSsoHandler::isHttpsUrl('https:///token'));
+    check('other scheme refused', !RaSsoHandler::isHttpsUrl('file:///etc/passwd'));
+    check('space refused', !RaSsoHandler::isHttpsUrl('https://login.example.org/a b'));
+    check('backslash refused', !RaSsoHandler::isHttpsUrl('https://login.example.org\\@evil.example/'));
+    check('empty refused', !RaSsoHandler::isHttpsUrl(''));
+    check('non-string refused', !RaSsoHandler::isHttpsUrl(null));
+
+    // The email must be positively verified.
+    foreach ([true, 1, '1', 'true', 'TRUE'] as $yes) {
+        check('email_verified ' . var_export($yes, true) . ' accepted', RaSsoHandler::emailVerified(['email_verified' => $yes]));
+    }
+    foreach ([false, 0, '0', 'false', null, '', 'yes', 2, []] as $no) {
+        check('email_verified ' . var_export($no, true) . ' refused', !RaSsoHandler::emailVerified(['email_verified' => $no]));
+    }
+    check('missing email_verified refused', !RaSsoHandler::emailVerified(['email' => 'ann@example.org']));
+    check('non-array refused', !RaSsoHandler::emailVerified('x'));
+
     echo $failures === 0 ? "\nAll passed\n" : "\n$failures failed\n";
     exit($failures === 0 ? 0 : 1);
 }
